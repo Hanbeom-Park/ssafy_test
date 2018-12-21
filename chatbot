@@ -1,0 +1,207 @@
+# -*- coding: utf-8 -*-
+import json
+import re
+import urllib
+from bs4 import BeautifulSoup
+from urllib import parse
+from slackclient import SlackClient
+from flask import Flask, request, make_response, render_template
+import time
+import datetime
+import multiprocessing as mp
+from threading import Thread
+
+app = Flask(__name__)
+
+slack_token = "xoxb-506062083639-508867973302-2FnF6uyEli4PLDyvaE73AXKB" #자신의 토큰 값을 입력해줍니다.
+
+slack_client_id = "506062083639.507296992020" #client_id 값을 입력합니다.
+slack_client_secret = "65644cfa829ce08123d3b4b5f239e9f8" #client_secret 값을 입력합니다.
+slack_verification = "uaXlelMW3jxkJCQf8JDfcplv" #verification 값을 입력합니다.
+sc = SlackClient(slack_token)
+# threading function
+def processing_event(queue):
+   while True:
+       # 큐가 비어있지 않은 경우 로직 실행
+       if not queue.empty():
+           slack_event = queue.get()
+
+           # Your Processing Code Block gose to here
+           channel = slack_event["event"]["channel"]
+           text = slack_event["event"]["text"]
+
+           # 챗봇 크롤링 프로세스 로직 함수
+           keywords = processing_function(text)
+
+           # 아래에 슬랙 클라이언트 api를 호출하세요
+           sc.api_call(
+               "chat.postMessage",
+               channel=channel,
+               text=keywords
+           )
+
+# 크롤링 함수 구현하기
+def _crawl_naver_keywords(text):
+   #여기에 함수를 구현해봅시다.
+   #keywords = []
+   #artists = []
+   cartoon_link = []
+   flag = -1
+   day_of_the_week = {"월요일": "mon", "화요일": "tue", "수요일": "wed", "목요일": "thu", "금요일": "fri", "토요일": "sat", "일요일": "sun"}
+   text = text.split()[1]
+   error_msg = []
+   if "오늘" in text:
+       url = "https://comic.naver.com/webtoon/weekday.nhn"
+       req = urllib.request.Request(url)
+
+       sourcecode = urllib.request.urlopen(url).read()
+       soup = BeautifulSoup(sourcecode, "html.parser")
+       cartoon_link.append("오늘의 웹툰입니다.")
+       for keyword in soup.find(class_="col col_selected").find_all("li"):
+           cartoon_link.append(keyword.find("a", class_="title").get_text().strip() + ": https://comic.naver.com/" + keyword.find("a").get('href'))
+       print("오늘")
+       return u'\n'.join(cartoon_link)
+   else:
+       for i in day_of_the_week.keys():
+           # print(day_of_the_week[i])
+           if i in text:
+               flag = 1
+               url_naver_days = "https://comic.naver.com/webtoon/weekdayList.nhn?week=" + day_of_the_week[i]
+               print(url_naver_days)
+               req = urllib.request.Request(url_naver_days)
+
+               sourcecode = urllib.request.urlopen(url_naver_days).read()
+               soup = BeautifulSoup(sourcecode, "html.parser")
+               cartoon_link.append(i + " 웹툰입니다.")
+               for keyword in soup.find(class_="list_area daily_img").find_all("li"):
+                   cartoon_link.append(keyword.find("dt").get_text().strip() + ": https://comic.naver.com/" + keyword.find("a").get('href'))
+               return u'\n'.join(cartoon_link)
+       if flag<0:
+            url_sequence = ["가", "나", "다", "라", "마", "바", "사", "아", "자", "차", "카", "타", "파", "하", "A", "1"]
+            urls = []
+            author_name = text
+            author_info = []
+            authors_to_webtoons = {}
+            for i in range(len(url_sequence)):
+                full_url = "https://comic.naver.com/webtoon/artistList.nhn?prefix=" + urllib.parse.quote_plus(url_sequence[i])
+                urls.append(full_url)
+
+            # 가,나,다 작가별 웹툰
+            for url in urls:
+                req = urllib.request.Request(url)
+                sourcecode = urllib.request.urlopen(url).read()
+                soup = BeautifulSoup(sourcecode, "html.parser")
+                for i in soup.find_all("dl"):
+                    author = i.find("dd", class_="desc").find("a")["title"].strip()
+                    if author in ("웹툰작가" or "네이버 웹툰 작가"):
+                        pass
+                    else:
+                        webtoon = i.find("dt").find("a")["title"].strip()
+                        link = i.find("dt").find("a")["href"]
+                        link = "https://comic.naver.com" + link
+                        webtoon = webtoon + " : " + link
+                        if author not in authors_to_webtoons:
+                            authors_to_webtoons[author] = [webtoon]
+                        else:
+                            if webtoon not in authors_to_webtoons[author]:####이걸 고쳐야 함
+                                authors_to_webtoons[author].append(webtoon)
+
+            if author_name not in authors_to_webtoons:
+                result = []
+                cartoon_list_now = {}
+                cartoon_list_complete = {}
+                url_naver_days = "https://comic.naver.com/webtoon/weekday.nhn"
+                req = urllib.request.Request(url_naver_days)
+                sourcecode = urllib.request.urlopen(url_naver_days).read()
+                soup = BeautifulSoup(sourcecode, "html.parser")
+
+                for keyword in soup.find(class_="list_area daily_all").find_all("li"):
+                    cartoon_list_now[
+                        keyword.find("a", class_="title").get('title')] = "https://comic.naver.com/" + keyword.find(
+                        "a").get('href')
+
+                url_naver_days = "https://comic.naver.com/webtoon/finish.nhn"
+                req = urllib.request.Request(url_naver_days)
+                sourcecode = urllib.request.urlopen(url_naver_days).read()
+                soup = BeautifulSoup(sourcecode, "html.parser")
+
+                for keyword in soup.find(class_="img_list").find_all("div", class_="thumb"):
+                    cartoon_list_complete[keyword.find("a").get('title')] = "https://comic.naver.com/" + keyword.find("a").get('href')
+
+                for i in cartoon_list_now:
+                    if i in text:
+                        url_naver_days = cartoon_list_now[i]
+                        req = urllib.request.Request(url_naver_days)
+                        sourcecode = urllib.request.urlopen(url_naver_days).read()
+                        soup = BeautifulSoup(sourcecode, "html.parser")
+                        for keyword in soup.find_all("div", class_="detail"):
+                            result.append(i + " : " + keyword.find("p").get_text() + " " + cartoon_list_now[i])
+
+                for i in cartoon_list_complete:
+                    if i in text:
+                        url_naver_days = cartoon_list_complete[i]
+                        req = urllib.request.Request(url_naver_days)
+                        sourcecode = urllib.request.urlopen(url_naver_days).read()
+                        soup = BeautifulSoup(sourcecode, "html.parser")
+                        for keyword in soup.find_all("div", class_="detail"):
+                            result.append(
+                                i + " : " + keyword.find("p").get_text().replace("\n", " ").replace("\r", " ") + " " +
+                                cartoon_list_complete[i])
+                if len(result) != 0:
+                    return u'\n'.join(result)
+                else:
+                    error_msg.append("error")
+                    return u'\n'.join(error_msg)
+            else:
+                for key in authors_to_webtoons.keys():
+                    if author_name in key:
+                        for info in authors_to_webtoons[key]:
+                            if info not in author_info:
+                                author_info.append(info)
+            # 한글 지원을 위해 앞에 unicode u를 붙혀준다.
+                return u'\n'.join(author_info)
+
+# 이벤트 핸들하는 함수
+def _event_handler(event_type, slack_event):
+
+   if event_type == "app_mention":
+       event_queue.put(slack_event)
+       return make_response("App mention message has been sent", 200, )
+
+
+@app.route("/listening", methods=["GET", "POST"])
+def hears():
+   slack_event = json.loads(request.data)
+
+   if "challenge" in slack_event:
+       return make_response(slack_event["challenge"], 200, {"content_type":
+                                                                "application/json"
+                                                            })
+
+   if slack_verification != slack_event.get("token"):
+       message = "Invalid Slack verification token: %s" % (slack_event["token"])
+       make_response(message, 403, {"X-Slack-No-Retry": 1})
+
+   if "event" in slack_event:
+       event_type = slack_event["event"]["type"]
+       return _event_handler(event_type, slack_event)
+
+   # If our bot hears things that are not events we've subscribed to,
+   # send a quirky but helpful error response
+   return make_response("[NO EVENT IN SLACK REQUEST] These are not the droids\
+                       you're looking for.", 404, {"X-Slack-No-Retry": 1})
+
+
+@app.route("/", methods=["GET"])
+def index():
+   return "<h1>Server is ready.</h1>"
+
+if __name__ == '__main__':
+    event_queue = mp.Queue()
+
+    p = Thread(target=processing_event, args=(event_queue,))
+    p.start()
+    print("subprocess started")
+
+    app.run('0.0.0.0', port=8080)
+    p.join()
