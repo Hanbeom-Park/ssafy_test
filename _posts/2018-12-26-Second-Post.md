@@ -1,5 +1,5 @@
 ---
-title: [1주차 Reflection] Design Thinking 방법론
+title: Design Thinking 방법론
 ---
 대전_3_박한범, https://github.com/Hanbeom-Park/ssafy_test
 # [1주차 Reflection] Design Thinking 방법론
