@@ -23,5 +23,5 @@ title: [1주차 Reflection] Design Thinking 방법론
 | 테스트(Test) | 피드백을 통해 아이디어를 개선 | 1.피드백 공유: 월드카페 종료 후. 피드백 받았던 내용을 공유하고 수정보완할 사항 정리 |
 ||  | 2.프로토 타입 개선: 핵심적인 수정사항 확인 후 보완하기 위해 추가 아이디어 논의 및 추가 자료 보완 | 
 ||  | 3.발표: 오프닝-본론- 클로징에 따라 시나리오를 구성하고, 발표자료를 작성한다.| 
-| [Table caption, works as a reference][section-mmd-tables-table1] 
+
 
